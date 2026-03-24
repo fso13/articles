@@ -10,7 +10,7 @@
 
   var FILES = {
     "/home/guest/readme.txt":
-      "Добро пожаловать в гостевую сессию.\nВведите help — список команд.\n",
+      "Добро пожаловать в гостевую сессию.\nВведите help — список команд.\nПапка draft/ — черновики (не на главной): cd draft, ls, cat имя.md\n",
     "/home/guest/docs/note.txt":
       "Черновик: проверить логи перед выходом.\n",
     "/var/log/app.log":
@@ -23,12 +23,23 @@
   var DIRS = {
     "/": ["home", "etc", "var", ".", ".."],
     "/home": ["guest", ".", ".."],
-    "/home/guest": ["readme.txt", "docs", RECOVERY_VNODE, NOSTALGIA_VNODE, ".", ".."],
+    "/home/guest": ["readme.txt", "docs", "draft", RECOVERY_VNODE, NOSTALGIA_VNODE, ".", ".."],
     "/home/guest/docs": ["note.txt", ".", ".."],
     "/etc": ["hosts", "passwd", ".", ".."],
     "/var": ["log", ".", ".."],
     "/var/log": ["app.log", ".", ".."],
   };
+
+  function draftFileRows() {
+    var raw = document.body.getAttribute("data-cli-draft-index");
+    if (!raw) return [];
+    try {
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
 
   function hiddenLinkRows() {
     var raw = document.body.getAttribute("data-cli-hidden-links");
@@ -50,6 +61,19 @@
     return [];
   }
 
+  /** /home/guest/draft/<name>.md → черновик на сайте */
+  function findDraftEntry(resolved) {
+    if (resolved.indexOf("/home/guest/draft/") !== 0) return null;
+    var base = "/home/guest/draft/";
+    var name = resolved.slice(base.length);
+    if (!name) return null;
+    var rows = draftFileRows();
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].name === name) return rows[i];
+    }
+    return null;
+  }
+
   /** Полный путь /home/guest/<catFile> → запись со ссылкой на статью */
   function findArticleEntry(resolved) {
     var rows = hiddenLinkRows();
@@ -60,8 +84,15 @@
     return null;
   }
 
-  /** Содержимое каталога (в ~ подмешиваются vnode скрытых статей из разметки) */
+  /** Содержимое каталога (в ~ — vnode скрытых статей; в ~/draft — список черновиков) */
   function dirEntries(path) {
+    if (path === "/home/guest/draft") {
+      var drows = draftFileRows();
+      var names = drows.map(function (r) {
+        return r.name;
+      });
+      return names.concat([".", ".."]);
+    }
     var base = DIRS[path];
     if (!base) return null;
     if (path !== "/home/guest") return base;
@@ -102,6 +133,7 @@
   }
 
   function isDir(p) {
+    if (p === "/home/guest/draft") return true;
     return Object.prototype.hasOwnProperty.call(DIRS, p);
   }
 
@@ -119,7 +151,9 @@
   }
 
   function promptPath(cwd) {
-    return cwd === "/home/guest" ? "~" : cwd;
+    if (cwd === "/home/guest") return "~";
+    if (cwd === "/home/guest/draft") return "~/draft";
+    return cwd;
   }
 
   function tokenize(line) {
@@ -174,6 +208,7 @@
   function fileSize(path) {
     if (path === "/home/guest/" + RECOVERY_VNODE) return 4096;
     if (path === "/home/guest/" + NOSTALGIA_VNODE) return 3072;
+    if (findDraftEntry(path)) return 2048;
     if (findArticleEntry(path)) return 512;
     var c = FILES[path];
     if (c) return c.length;
@@ -508,6 +543,12 @@
         var pathCat = resolvePath(cwd, args[1]);
         if (!pathCat) {
           println("cat: invalid path");
+          return;
+        }
+        var dr = findDraftEntry(pathCat);
+        if (dr && dr.href) {
+          println("→ открываю " + (dr.title || dr.name));
+          window.location.assign(dr.href);
           return;
         }
         var art = findArticleEntry(pathCat);

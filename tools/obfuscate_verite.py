@@ -113,7 +113,7 @@ def obfuscate_file(src: Path, dst: Path) -> None:
     note = (
         "\n\n<!-- Декодирование ⧚…⧛: idx=0,1,2… по файлу. "
         "1) сдвиг r=(idx*11+len*3)%len → s=s[(len-r):]+s[:(len-r)] при len>1. "
-        "2) кастомный алфавит → base64 (cat ._____fffd.qbf в CLI после 13 кликов по теме; статьи — cat ._____verite._node / ._____screen._out); ⌯→=. "
+        "2) кастомный алфавит → base64 (cat ._____fffd.qbf в CLI после 13 кликов по теме; скрытые статьи — cat ._____verite._node / ._____screen._out; черновики — cd draft, cat *.md); ⌯→=. "
         "3) base64→bytes. 4) XOR b[i]^((idx*131+i*17+(idx*i)%251)&255). 5) UTF-8. "
         f'STD64="{STANDARD64}" CUSTOM64="{CUSTOM64}" -->\n'
     )

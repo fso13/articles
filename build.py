@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Собирает статический сайт из *.md в корне проекта → каталог site/."""
+"""Собирает статический сайт: *.md в корне → site/articles/, draft/*.md → site/draft/ (без главной)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ import markdown
 ROOT = Path(__file__).resolve().parent
 SITE = ROOT / "site"
 ARTICLES_DIR = SITE / "articles"
+DRAFT_SRC = ROOT / "draft"
+DRAFT_DIR = SITE / "draft"
 ASSETS = SITE / "assets"
 STYLE_SRC = ROOT / "style.css"
 STYLE_DST = ASSETS / "style.css"
@@ -145,17 +147,35 @@ NOSTALGIA_PLAINTEXT_B64 = base64.standard_b64encode(
 ).decode("ascii")
 
 
-def cli_hidden_links_json(*, from_article_dir: bool) -> str:
-    """from_article_dir: True — href как 03-….html; False — articles/03-….html. catFile — vnode в ~."""
-    items = [
-        {
-            "href": (f"{slug}.html" if from_article_dir else f"articles/{slug}.html"),
-            "label": label,
-            "catFile": cat_file,
-        }
-        for slug, label, cat_file in _CLI_HIDDEN_ARTICLES
-    ]
+def cli_terminal_links_json(*, page: str) -> str:
+    """Скрытые статьи в ~: cat по catFile → href. page: index | article | draft."""
+    items: list[dict[str, str]] = []
+    for slug, label, cat_file in _CLI_HIDDEN_ARTICLES:
+        if page == "index":
+            href = f"articles/{slug}.html"
+        elif page == "article":
+            href = f"{slug}.html"
+        else:
+            href = f"../articles/{slug}.html"
+        items.append({"href": href, "label": label, "catFile": cat_file})
     return json.dumps(items, ensure_ascii=False)
+
+
+def cli_draft_dir_json(
+    *, page: str, draft_entries: list[tuple[str, str]]
+) -> str:
+    """Содержимое виртуальной ~/draft/: name — как в источнике (.md), cat открывает href."""
+    rows: list[dict[str, str]] = []
+    for slug, title in draft_entries:
+        name = f"{slug}.md"
+        if page == "index":
+            href = f"draft/{slug}.html"
+        elif page == "article":
+            href = f"../draft/{slug}.html"
+        else:
+            href = f"{slug}.html"
+        rows.append({"name": name, "href": href, "title": title})
+    return json.dumps(rows, ensure_ascii=False)
 
 
 def first_h1_title(md_text: str) -> str | None:
@@ -218,6 +238,7 @@ def article_html(
     body_html: str,
     root_prefix: str,
     data_cli_hidden_links_json: str,
+    data_cli_draft_index_json: str,
     data_cli_recovery_href: str,
     data_cli_recovery_b64: str,
     data_cli_nostalgia_href: str,
@@ -234,7 +255,7 @@ def article_html(
 {FONT_LINK}
   <link rel="stylesheet" href="{root_prefix}assets/style.css">
 </head>
-<body data-cli-hidden-links="{_esc(data_cli_hidden_links_json)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}" data-cli-nostalgia-href="{_esc(data_cli_nostalgia_href)}" data-cli-nostalgia-b64="{_esc(data_cli_nostalgia_b64)}">
+<body data-cli-hidden-links="{_esc(data_cli_hidden_links_json)}" data-cli-draft-index="{_esc(data_cli_draft_index_json)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}" data-cli-nostalgia-href="{_esc(data_cli_nostalgia_href)}" data-cli-nostalgia-b64="{_esc(data_cli_nostalgia_b64)}">
 {TALOS_CHATTER}
 {THEME_CONTROL}  <div class="wrap">
     <header class="site-header">
@@ -261,6 +282,7 @@ def article_html(
 def index_html(
     items: list[tuple[str, str, str]],
     data_cli_hidden_links_json: str,
+    data_cli_draft_index_json: str,
     data_cli_recovery_href: str,
     data_cli_recovery_b64: str,
     data_cli_nostalgia_href: str,
@@ -284,7 +306,7 @@ def index_html(
 {FONT_LINK}
   <link rel="stylesheet" href="assets/style.css">
 </head>
-<body data-cli-hidden-links="{_esc(data_cli_hidden_links_json)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}" data-cli-nostalgia-href="{_esc(data_cli_nostalgia_href)}" data-cli-nostalgia-b64="{_esc(data_cli_nostalgia_b64)}">
+<body data-cli-hidden-links="{_esc(data_cli_hidden_links_json)}" data-cli-draft-index="{_esc(data_cli_draft_index_json)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}" data-cli-nostalgia-href="{_esc(data_cli_nostalgia_href)}" data-cli-nostalgia-b64="{_esc(data_cli_nostalgia_b64)}">
 {TALOS_CHATTER}
 {THEME_CONTROL}  <div class="wrap">
     <header class="site-header">
@@ -319,6 +341,7 @@ def _esc(s: str) -> str:
 def main() -> int:
     SITE.mkdir(parents=True, exist_ok=True)
     ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
+    DRAFT_DIR.mkdir(parents=True, exist_ok=True)
     ASSETS.mkdir(parents=True, exist_ok=True)
 
     if not STYLE_SRC.is_file():
@@ -334,8 +357,19 @@ def main() -> int:
     (ASSETS / RECOVERY_ASSET_FILENAME).write_text(RECOVERY_PLAINTEXT, encoding="utf-8")
     (ASSETS / NOSTALGIA_ASSET_FILENAME).write_text(NOSTALGIA_PLAINTEXT, encoding="utf-8")
 
-    hidden_links_index = cli_hidden_links_json(from_article_dir=False)
-    hidden_links_article = cli_hidden_links_json(from_article_dir=True)
+    draft_entries: list[tuple[str, str]] = []
+    if DRAFT_SRC.is_dir():
+        for path in sorted(DRAFT_SRC.glob("*.md")):
+            dtext = path.read_text(encoding="utf-8")
+            dtitle = first_h1_title(dtext) or path.stem
+            draft_entries.append((slug_from_filename(path), dtitle))
+
+    links_index = cli_terminal_links_json(page="index")
+    links_article = cli_terminal_links_json(page="article")
+    links_draft = cli_terminal_links_json(page="draft")
+    draft_idx_index = cli_draft_dir_json(page="index", draft_entries=draft_entries)
+    draft_idx_article = cli_draft_dir_json(page="article", draft_entries=draft_entries)
+    draft_idx_draft = cli_draft_dir_json(page="draft", draft_entries=draft_entries)
 
     md_files = sorted(ROOT.glob("*.md"))
     if not md_files:
@@ -357,7 +391,8 @@ def main() -> int:
                 title,
                 body,
                 "../",
-                hidden_links_article,
+                links_article,
+                draft_idx_article,
                 recovery_href_article,
                 RECOVERY_PLAINTEXT_B64,
                 nostalgia_href_article,
@@ -368,12 +403,38 @@ def main() -> int:
         if slug not in HIDDEN_FROM_INDEX_SLUGS:
             items.append((slug, title, str(path)))
 
+    if DRAFT_SRC.is_dir():
+        for path in sorted(DRAFT_SRC.glob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            title = first_h1_title(text) or path.stem
+            slug = slug_from_filename(path)
+            MD.reset()
+            body = inject_prose_artifacts(MD.convert(text))
+            draft_out = DRAFT_DIR / f"{slug}.html"
+            recovery_href_draft = f"../assets/{RECOVERY_ASSET_FILENAME}"
+            nostalgia_href_draft = f"../assets/{NOSTALGIA_ASSET_FILENAME}"
+            draft_out.write_text(
+                article_html(
+                    title,
+                    body,
+                    "../",
+                    links_draft,
+                    draft_idx_draft,
+                    recovery_href_draft,
+                    RECOVERY_PLAINTEXT_B64,
+                    nostalgia_href_draft,
+                    NOSTALGIA_PLAINTEXT_B64,
+                ),
+                encoding="utf-8",
+            )
+
     recovery_href_index = f"assets/{RECOVERY_ASSET_FILENAME}"
     nostalgia_href_index = f"assets/{NOSTALGIA_ASSET_FILENAME}"
     (SITE / "index.html").write_text(
         index_html(
             items,
-            hidden_links_index,
+            links_index,
+            draft_idx_index,
             recovery_href_index,
             RECOVERY_PLAINTEXT_B64,
             nostalgia_href_index,
@@ -381,9 +442,10 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
+    ndraft = len(draft_entries)
     print(
-        f"Готово: {len(md_files)} статей в site/, в индексе: {len(items)} "
-        f"(скрыты: {HIDDEN_FROM_INDEX_SLUGS}) → {SITE}"
+        f"Готово: {len(md_files)} статей в site/articles/, черновиков: {ndraft} в site/draft/, "
+        f"в индексе: {len(items)} (скрыты с главной: {HIDDEN_FROM_INDEX_SLUGS}) → {SITE}"
     )
     return 0
 
