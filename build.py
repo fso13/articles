@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -18,7 +19,19 @@ STYLE_DST = ASSETS / "style.css"
 
 MD = markdown.Markdown(extensions=["smarty", "sane_lists"])
 
-FONT_LINK = """  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">"""
+FONT_LINK = """  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
+
+TALOS_CHATTER = """  <div class="talos-chatter" aria-hidden="true"><pre>guest@loc:~$ webcrawl --node /archive
+[scan] sector 7 … ok
+daemon: sphinx_idle
+log: signal_lost layer=3
+stderr → /dev/null
+.M.M.M.M.M.M.M.M.
+integrity: PENDING
+ui: console v0.9
+awaiting input _</pre></div>"""
+
+TALOS_HEXBAR = """    <p class="talos-hexbar" aria-hidden="true">&lt;a href="d09e d0a8 e2fb 3c1a 9d02 a7ff 4e21 bbb0"&gt;</p>"""
 
 THEME_HEAD_SCRIPT = """  <script>
     (function(){try{var t=localStorage.getItem("theme");if(t==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}})();
@@ -65,6 +78,49 @@ def slug_from_filename(path: Path) -> str:
     return path.stem
 
 
+# «Битые» вставки между абзацами (стиль Talos / повреждённый поток)
+_PROSE_ARTIFACTS = (
+    "0x7F_ERR // partial_frame · checksum ?",
+    "▒▓░▒▓░ … stream_corrupt · retry=3",
+    "<frag d09e a7ff c0de /> // EOF before close",
+    "READ 0x00 │ READ 0xFF │ length ≠ bytes",
+    "guest@loc: vault_dump.bin · [████░░] 62%",
+    "M.M.M … echo_OFF … M.M.M · layer glitch",
+    "~ §§§ … utf-8: decoder stalled at U+FFFD",
+    "EM_buffer: overflow @ 0 of ∞ // dropped",
+    "webcrawl: node lost · backtrace: ???",
+    "█▀▄ █▄▀ ▀▄▀ // phosphor bleed",
+    "signal: -∞ dB · ████████████",
+    "integrity: PENDING … ████▒▒▒▒ … OK?",
+)
+
+
+# Вставлять артефакт только на каждом K-м зазоре между абзацами (1 = как раньше, у всех).
+_ARTIFACT_EVERY_KTH_GAP = 3
+
+
+def inject_prose_artifacts(html: str) -> str:
+    """Вставляет строки только между некоторыми парами <p> (каждый K-й зазор)."""
+    gap_num = 0
+    artifact_idx = 0
+
+    def repl(m: re.Match[str]) -> str:
+        nonlocal gap_num, artifact_idx
+        gap_num += 1
+        ws = m.group(1)
+        if gap_num % _ARTIFACT_EVERY_KTH_GAP != 0:
+            return m.group(0)
+        line = _PROSE_ARTIFACTS[artifact_idx % len(_PROSE_ARTIFACTS)]
+        artifact_idx += 1
+        variant = artifact_idx % 6
+        return (
+            f"</p>{ws}<div class=\"prose-artifact prose-artifact--{variant}\" "
+            f'aria-hidden="true">{_esc(line)}</div>{ws}'
+        )
+
+    return re.sub(r"</p>(\s*)(?=<p\b)", repl, html, flags=re.IGNORECASE)
+
+
 def article_html(title: str, body_html: str, root_prefix: str) -> str:
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -78,12 +134,14 @@ def article_html(title: str, body_html: str, root_prefix: str) -> str:
   <link rel="stylesheet" href="{root_prefix}assets/style.css">
 </head>
 <body>
+{TALOS_CHATTER}
 {THEME_CONTROL}  <div class="wrap">
     <header class="site-header">
       <h1 class="site-title">Архив</h1>
       <p class="site-tagline">Заметки программиста</p>
     </header>
     <div class="wrap-inner">
+{TALOS_HEXBAR}
     <main class="article">
       <a class="back" href="{root_prefix}index.html">← к списку</a>
       <article class="prose">
@@ -118,12 +176,14 @@ def index_html(items: list[tuple[str, str, str]]) -> str:
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
+{TALOS_CHATTER}
 {THEME_CONTROL}  <div class="wrap">
     <header class="site-header">
       <h1 class="site-title">Архив</h1>
       <p class="site-tagline">Заметки программиста</p>
     </header>
     <div class="wrap-inner">
+{TALOS_HEXBAR}
     <main>
       <ul class="article-list">
         {list_html}
@@ -167,7 +227,7 @@ def main() -> int:
         title = first_h1_title(text) or path.stem
         slug = slug_from_filename(path)
         MD.reset()
-        body = MD.convert(text)
+        body = inject_prose_artifacts(MD.convert(text))
         out = ARTICLES_DIR / f"{slug}.html"
         out.write_text(article_html(title, body, "../"), encoding="utf-8")
         items.append((slug, title, str(path)))
