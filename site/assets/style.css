@@ -144,6 +144,23 @@ body::after {
   word-break: break-word;
 }
 
+/* Подсказка к пасхалке CLI (другой шрифт + подсказка по hover) */
+.talos-chatter__hint {
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: 0.82em;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+  color: var(--prompt);
+  opacity: 0.95;
+  text-shadow: 0 0 12px rgba(180, 200, 190, 0.35);
+  pointer-events: auto;
+  cursor: help;
+}
+
+html[data-theme="light"] .talos-chatter__hint {
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.12);
+}
+
 .wrap {
   position: relative;
   z-index: 2;
@@ -512,6 +529,98 @@ html[data-theme="light"] .theme-btn:hover {
   }
 }
 
+/* CLI после 13 нажатий на переключатель темы */
+#talos-cli-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1rem 1rem 5rem;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.talos-cli-panel {
+  width: 100%;
+  max-width: 36rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.talos-cli-head {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-head);
+}
+
+.talos-cli-out {
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.5rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.talos-cli-line-out {
+  margin: 0.15rem 0;
+}
+
+.talos-cli-line-out--pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.talos-cli-line-out--link {
+  margin-top: 0.5rem;
+}
+
+.talos-cli-link {
+  color: var(--link);
+  text-decoration: underline;
+}
+
+.talos-cli-line {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.45rem 0.65rem;
+  border-top: 1px solid var(--border);
+  background: var(--panel-head);
+}
+
+.talos-cli-prompt {
+  flex-shrink: 0;
+  color: var(--prompt);
+  font-size: 0.82rem;
+}
+
+.talos-cli-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--fg-bright);
+  font: inherit;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.talos-cli-hint {
+  margin: 0;
+  padding: 0.25rem 0.65rem 0.45rem;
+  font-size: 0.65rem;
+  color: var(--fg-dim);
+  border-top: 1px solid var(--border);
+}
+
 @media (max-width: 520px) {
   html {
     font-size: 18px;
@@ -529,5 +638,9 @@ html[data-theme="light"] .theme-btn:hover {
 
   .theme-btn {
     width: 100%;
+  }
+
+  #talos-cli-overlay {
+    padding-bottom: 6rem;
   }
 }

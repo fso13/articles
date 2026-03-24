@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 import shutil
 import sys
@@ -16,12 +17,17 @@ ARTICLES_DIR = SITE / "articles"
 ASSETS = SITE / "assets"
 STYLE_SRC = ROOT / "style.css"
 STYLE_DST = ASSETS / "style.css"
+CLI_JS_SRC = ROOT / "cli-easter-egg.js"
+CLI_JS_DST = ASSETS / "cli-easter-egg.js"
+
+# Не показывать в списке на index.html (страница всё равно собирается)
+HIDDEN_FROM_INDEX_SLUGS = frozenset({"03-verite-v-boga"})
 
 MD = markdown.Markdown(extensions=["smarty", "sane_lists"])
 
-FONT_LINK = """  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
+FONT_LINK = """  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">"""
 
-TALOS_CHATTER = """  <div class="talos-chatter" aria-hidden="true"><pre>guest@loc:~$ webcrawl --node /archive
+TALOS_CHATTER = """  <div class="talos-chatter" aria-hidden="true"><pre>guest@loc:~$ webcrawl --node /archive <span class="talos-chatter__hint" title="Переключатель «день / ночь» — 13 нажатий">13×night</span>
 [scan] sector 7 … ok
 daemon: sphinx_idle
 log: signal_lost layer=3
@@ -64,6 +70,48 @@ THEME_FOOT_SCRIPT = """  <script>
       sync();
     })();
   </script>"""
+
+# Кастомный base64 для скрытой статьи (должен совпадать с tools/obfuscate_verite.py)
+_B64_STANDARD_ALPHABET = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+)
+_B64_CUSTOM_ALPHABET = (
+    "▒▓░█▀▄▌▐├┤┴┬┼╳╱╲◆◇○●□■△▽※⁑‧ͼΞϗϞЩЪЫЭЮΓΔΘΛΠΣΦΨΩαβγδεζηθλμνξπПР⌬⍟⎊⏣"
+)
+
+# Скрытый текстовый «мусорный» файл в assets (подсказки к ⧚…⧛; в терминале: cat ._____fffd.qbf)
+RECOVERY_ASSET_FILENAME = "d09efffd.~chunk.dmp"
+
+RECOVERY_PLAINTEXT = f"""# fragment: recovery layer 3 // not for distribution
+
+fso13: прикинь, я щас залез на сервак одного НИИ, стащил дамп страницы. там между ⧚ и ⧛ какие-то куски — не слова, а каша символов
+Jenny77: кидай на шару, позыркаем
+fso13: смотри: каждый кусок внутри ⧚…⧛ — отдельный токен. если крутить расшифровку, идти надо с конца пайплайна, как они клали слои
+Jenny77: то есть последним шагом у них что было первым при кодировании?
+fso13: логично. сначала снимаем то, что они навесили последним. у меня по логам порядок такой: в конце это просто utf-8 текст
+Jenny77: ок, а до utf-8?
+fso13: байты прогнали через xor. восстанавливаешь так: plain[i] = masked[i] xor ((idx*131 + i*17 + (idx*i) mod 251) mod 256). idx — номер блока ⧚…⧛ с начала страницы, с нуля. i — байт внутри блока
+Jenny77: idx завязан на позицию токена, поняла. а до xor что лежало?
+fso13: base64-строка в байтах, только не ascii латиницей — у них кастомный алфавит под те же 64 позиции
+Jenny77: классика. значит каждый символ кастома меняешь на букву из нормального base64 с тем же индексом
+fso13: да. и вот этот значок ⌯ — это у них вместо padding =, подмени на = и кормишь обычный b64decode
+Jenny77: норм. а до base64 строка как-то ещё ковырялась?
+fso13: ага, циклический сдвиг по кругу. n — длина строки внутри ⧚…⧛, r = (idx*11 + n*3) mod n. если n > 1, откат: s = inner[(n-r):] + inner[:(n-r)]
+Jenny77: то есть сначала крутишь строку обратно, потом маппинг в стандартный b64, потом decode, потом xor, потом utf-8
+fso13: ровно. обратный порядок шагов кодирования
+Jenny77: скинь таблицу алфавитов, я сверю скрипт
+fso13: держи STD64, 64 символа подряд:
+{_B64_STANDARD_ALPHABET}
+fso13: и CUSTOM64 — позиция один в один с верхней строкой:
+{_B64_CUSTOM_ALPHABET}
+Jenny77: принято. не светись, этот лог жги после проверки
+fso13: уже
+"""
+
+# Встроено в HTML: cat ._____fffd.qbf работает и при file:// (fetch к файлу запрещён)
+RECOVERY_PLAINTEXT_B64 = base64.standard_b64encode(
+    RECOVERY_PLAINTEXT.encode("utf-8")
+).decode("ascii")
 
 
 def first_h1_title(md_text: str) -> str | None:
@@ -121,7 +169,14 @@ def inject_prose_artifacts(html: str) -> str:
     return re.sub(r"</p>(\s*)(?=<p\b)", repl, html, flags=re.IGNORECASE)
 
 
-def article_html(title: str, body_html: str, root_prefix: str) -> str:
+def article_html(
+    title: str,
+    body_html: str,
+    root_prefix: str,
+    data_cli_hidden_href: str,
+    data_cli_recovery_href: str,
+    data_cli_recovery_b64: str,
+) -> str:
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -133,7 +188,7 @@ def article_html(title: str, body_html: str, root_prefix: str) -> str:
 {FONT_LINK}
   <link rel="stylesheet" href="{root_prefix}assets/style.css">
 </head>
-<body>
+<body data-cli-hidden-href="{_esc(data_cli_hidden_href)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}">
 {TALOS_CHATTER}
 {THEME_CONTROL}  <div class="wrap">
     <header class="site-header">
@@ -151,12 +206,18 @@ def article_html(title: str, body_html: str, root_prefix: str) -> str:
     </div>
     <!-- <footer class="site-footer">Статический вывод</footer> -->
   </div>
-{THEME_FOOT_SCRIPT}</body>
+{THEME_FOOT_SCRIPT}  <script src="{root_prefix}assets/cli-easter-egg.js" defer></script>
+</body>
 </html>
 """
 
 
-def index_html(items: list[tuple[str, str, str]]) -> str:
+def index_html(
+    items: list[tuple[str, str, str]],
+    data_cli_hidden_href: str,
+    data_cli_recovery_href: str,
+    data_cli_recovery_b64: str,
+) -> str:
     lis = []
     for slug, title, _path in items:
         lis.append(
@@ -175,7 +236,7 @@ def index_html(items: list[tuple[str, str, str]]) -> str:
 {FONT_LINK}
   <link rel="stylesheet" href="assets/style.css">
 </head>
-<body>
+<body data-cli-hidden-href="{_esc(data_cli_hidden_href)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}">
 {TALOS_CHATTER}
 {THEME_CONTROL}  <div class="wrap">
     <header class="site-header">
@@ -192,7 +253,8 @@ def index_html(items: list[tuple[str, str, str]]) -> str:
     </div>
      <!-- <footer class="site-footer">Статический вывод</footer> -->
   </div>
-{THEME_FOOT_SCRIPT}</body>
+{THEME_FOOT_SCRIPT}  <script src="assets/cli-easter-egg.js" defer></script>
+</body>
 </html>
 """
 
@@ -216,6 +278,13 @@ def main() -> int:
         return 1
     shutil.copy2(STYLE_SRC, STYLE_DST)
 
+    if not CLI_JS_SRC.is_file():
+        print(f"Нет cli-easter-egg.js: {CLI_JS_SRC}", file=sys.stderr)
+        return 1
+    shutil.copy2(CLI_JS_SRC, CLI_JS_DST)
+
+    (ASSETS / RECOVERY_ASSET_FILENAME).write_text(RECOVERY_PLAINTEXT, encoding="utf-8")
+
     md_files = sorted(ROOT.glob("*.md"))
     if not md_files:
         print("В каталоге нет .md файлов.", file=sys.stderr)
@@ -229,11 +298,36 @@ def main() -> int:
         MD.reset()
         body = inject_prose_artifacts(MD.convert(text))
         out = ARTICLES_DIR / f"{slug}.html"
-        out.write_text(article_html(title, body, "../"), encoding="utf-8")
-        items.append((slug, title, str(path)))
+        recovery_href_article = f"../assets/{RECOVERY_ASSET_FILENAME}"
+        out.write_text(
+            article_html(
+                title,
+                body,
+                "../",
+                "03-verite-v-boga.html",
+                recovery_href_article,
+                RECOVERY_PLAINTEXT_B64,
+            ),
+            encoding="utf-8",
+        )
+        if slug not in HIDDEN_FROM_INDEX_SLUGS:
+            items.append((slug, title, str(path)))
 
-    (SITE / "index.html").write_text(index_html(items), encoding="utf-8")
-    print(f"Готово: {len(items)} статей → {SITE}")
+    index_cli_href = "articles/03-verite-v-boga.html"
+    recovery_href_index = f"assets/{RECOVERY_ASSET_FILENAME}"
+    (SITE / "index.html").write_text(
+        index_html(
+            items,
+            index_cli_href,
+            recovery_href_index,
+            RECOVERY_PLAINTEXT_B64,
+        ),
+        encoding="utf-8",
+    )
+    print(
+        f"Готово: {len(md_files)} статей в site/, в индексе: {len(items)} "
+        f"(скрыты: {HIDDEN_FROM_INDEX_SLUGS}) → {SITE}"
+    )
     return 0
 
 
