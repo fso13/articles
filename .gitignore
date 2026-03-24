@@ -1,0 +1,7 @@
+# Сборка для GitHub Pages выполняется в CI
+site/
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
