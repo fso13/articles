@@ -18,6 +18,8 @@ STYLE_DST = ASSETS / "style.css"
 
 MD = markdown.Markdown(extensions=["smarty", "sane_lists"])
 
+FONT_LINK = """  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">"""
+
 THEME_HEAD_SCRIPT = """  <script>
     (function(){try{var t=localStorage.getItem("theme");if(t==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}})();
   </script>"""
@@ -72,7 +74,7 @@ def article_html(title: str, body_html: str, root_prefix: str) -> str:
   <title>{_esc(title)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+{FONT_LINK}
   <link rel="stylesheet" href="{root_prefix}assets/style.css">
 </head>
 <body>
@@ -81,12 +83,14 @@ def article_html(title: str, body_html: str, root_prefix: str) -> str:
       <h1 class="site-title">Архив</h1>
       <p class="site-tagline">Заметки программиста</p>
     </header>
+    <div class="wrap-inner">
     <main class="article">
       <a class="back" href="{root_prefix}index.html">← к списку</a>
       <article class="prose">
         {body_html}
       </article>
     </main>
+    </div>
     <!-- <footer class="site-footer">Статический вывод</footer> -->
   </div>
 {THEME_FOOT_SCRIPT}</body>
@@ -110,7 +114,7 @@ def index_html(items: list[tuple[str, str, str]]) -> str:
   <title>Архив статей</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+{FONT_LINK}
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -119,11 +123,13 @@ def index_html(items: list[tuple[str, str, str]]) -> str:
       <h1 class="site-title">Архив</h1>
       <p class="site-tagline">Заметки программиста</p>
     </header>
+    <div class="wrap-inner">
     <main>
       <ul class="article-list">
         {list_html}
       </ul>
     </main>
+    </div>
      <!-- <footer class="site-footer">Статический вывод</footer> -->
   </div>
 {THEME_FOOT_SCRIPT}</body>
