@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <script>
+    (function(){try{var t=localStorage.getItem("theme");if(t==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}})();
+  </script>  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Архив статей</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <div class="theme-switch-wrap">
+    <button type="button" class="theme-btn" id="theme-toggle" aria-pressed="false" aria-label="Включить светлую тему">
+      <span class="theme-btn__text" id="theme-toggle-label">день</span>
+    </button>
+  </div>  <div class="wrap">
+    <header class="site-header">
+      <h1 class="site-title">Архив</h1>
+      <p class="site-tagline">Заметки программиста</p>
+    </header>
+    <main>
+      <ul class="article-list">
+        <li><a href="articles/01-lavochka-u-ulya.html">Лавочка у улья<span class="slug">01-lavochka-u-ulya</span></a></li>
+        <li><a href="articles/02-facecontrol.html">Facecontrol<span class="slug">02-facecontrol</span></a></li>
+        <li><a href="articles/04-iuda-po-protokolu.html">Поцелуй по протоколу<span class="slug">04-iuda-po-protokolu</span></a></li>
+        <li><a href="articles/05-lenta-i-lavochka.html">Лента и лавочка<span class="slug">05-lenta-i-lavochka</span></a></li>
+      </ul>
+    </main>
+     <!-- <footer class="site-footer">Статический вывод</footer> -->
+  </div>
+  <script>
+    (function(){
+      var root=document.documentElement;
+      var btn=document.getElementById("theme-toggle");
+      var label=document.getElementById("theme-toggle-label");
+      if(!btn)return;
+      function sync(){
+        var light=root.getAttribute("data-theme")==="light";
+        btn.setAttribute("aria-pressed",light?"true":"false");
+        btn.setAttribute("aria-label",light?"Включить тёмную тему":"Включить светлую тему");
+        if(label)label.textContent=light?"ночь":"день";
+      }
+      btn.addEventListener("click",function(){
+        if(root.getAttribute("data-theme")==="light")root.removeAttribute("data-theme");
+        else root.setAttribute("data-theme","light");
+        try{localStorage.setItem("theme",root.getAttribute("data-theme")==="light"?"light":"dark");}catch(e){}
+        sync();
+      });
+      sync();
+    })();
+  </script></body>
+</html>
