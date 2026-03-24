@@ -1,5 +1,15 @@
-# Сборка статики (python build.py) и публикация в GitHub Pages.
-# В репозитории: Settings → Pages → Build and deployment → Source: GitHub Actions.
+# Сборка: python build.py → каталог site/
+# Публикация: push содержимого site/ в ветку gh-pages (без API deploy-pages).
+#
+# Настройка один раз в репозитории:
+#   Settings → Pages → Build and deployment → Source: Deploy from a branch
+#   Branch: gh-pages, folder: / (root)
+#
+# Если у репозитория по умолчанию «Read» для GITHUB_TOKEN:
+#   Settings → Actions → General → Workflow permissions → Read and write permissions
+#
+# (Ошибка 404 у actions/deploy-pages бывает, когда в Pages не выбран источник
+# «GitHub Actions» — тогда официальный deploy не создаёт deployment.)
 
 name: Deploy to GitHub Pages
 
@@ -11,16 +21,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,18 +46,9 @@ jobs:
       - name: Build site
         run: python build.py
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Push to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: site
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: true
