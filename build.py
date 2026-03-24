@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 import shutil
 import sys
@@ -21,7 +22,13 @@ CLI_JS_SRC = ROOT / "cli-easter-egg.js"
 CLI_JS_DST = ASSETS / "cli-easter-egg.js"
 
 # Не показывать в списке на index.html (страница всё равно собирается)
-HIDDEN_FROM_INDEX_SLUGS = frozenset({"03-verite-v-boga"})
+HIDDEN_FROM_INDEX_SLUGS = frozenset({"03-verite-v-boga", "06-pokroviteli-ekrana"})
+
+# Скрытые статьи в CLI: slug, подпись, имя «файла» в ~ (открытие только через cat)
+_CLI_HIDDEN_ARTICLES: tuple[tuple[str, str, str], ...] = (
+    ("03-verite-v-boga", "«Вы верите в Бога?»", "._____verite._node"),
+    ("06-pokroviteli-ekrana", "«Покровители экрана»", "._____screen._out"),
+)
 
 MD = markdown.Markdown(extensions=["smarty", "sane_lists"])
 
@@ -113,6 +120,43 @@ RECOVERY_PLAINTEXT_B64 = base64.standard_b64encode(
     RECOVERY_PLAINTEXT.encode("utf-8")
 ).decode("ascii")
 
+# Второй скрытый «файл» в CLI: диалог про студенчество и экраны (cat .___bench~stk.log)
+NOSTALGIA_ASSET_FILENAME = "a7f3c2.~dorm.cache"
+
+NOSTALGIA_PLAINTEXT = """# dorm_echo.log // off-record
+
+fso13: помнишь общагу, третий этаж, у окна стоял тот самый ЭЛТ — зелёная фосфорная пыль на стекле?
+Jenny77: помню. ты тогда ещё верил, что интернет — это библиотека, а не витрина
+fso13: мы жарили лапшу в чайнике и спорили, святой покровитель нужен кабелю или человеку, который кабель держит в зубах
+Jenny77: как будто если дать линии имя, она перестанет нести дерьмо. смешно и грустно
+fso13: на лекции по сетям препод говорил: пакет не несёт вины. я думал — зато адрес назначения выбираю я
+Jenny77: а потом в комнату без стука заходил чужой свет — то сериал, то баннер, то «ещё одна серия». как будто телек был вторым соседом
+fso13: мы с тобой ночью вырубали звук и смотрели на сетку на экране — как на звёзды, только это были пиксели и чужие жизни
+Jenny77: студенты мы были наивные: думали, что если понять протокол, можно понять и себя
+fso13: теперь я знаю: протокол честнее алгоритма ленты. лента кормит тем, что ты уже прожевал
+Jenny77: зато на лавке без розетки тише. дерево не шлёт push-уведомлений
+fso13: да. небесный патрон на железе — метафора. а выбор, куда смотреть, — всё ещё руками
+Jenny77: береги внимание, студент. экзамен не сдан — пока ты весь в стекле
+fso13: …как тогда. только стекло теперь в кармане
+"""
+
+NOSTALGIA_PLAINTEXT_B64 = base64.standard_b64encode(
+    NOSTALGIA_PLAINTEXT.encode("utf-8")
+).decode("ascii")
+
+
+def cli_hidden_links_json(*, from_article_dir: bool) -> str:
+    """from_article_dir: True — href как 03-….html; False — articles/03-….html. catFile — vnode в ~."""
+    items = [
+        {
+            "href": (f"{slug}.html" if from_article_dir else f"articles/{slug}.html"),
+            "label": label,
+            "catFile": cat_file,
+        }
+        for slug, label, cat_file in _CLI_HIDDEN_ARTICLES
+    ]
+    return json.dumps(items, ensure_ascii=False)
+
 
 def first_h1_title(md_text: str) -> str | None:
     for line in md_text.splitlines():
@@ -173,9 +217,11 @@ def article_html(
     title: str,
     body_html: str,
     root_prefix: str,
-    data_cli_hidden_href: str,
+    data_cli_hidden_links_json: str,
     data_cli_recovery_href: str,
     data_cli_recovery_b64: str,
+    data_cli_nostalgia_href: str,
+    data_cli_nostalgia_b64: str,
 ) -> str:
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -188,7 +234,7 @@ def article_html(
 {FONT_LINK}
   <link rel="stylesheet" href="{root_prefix}assets/style.css">
 </head>
-<body data-cli-hidden-href="{_esc(data_cli_hidden_href)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}">
+<body data-cli-hidden-links="{_esc(data_cli_hidden_links_json)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}" data-cli-nostalgia-href="{_esc(data_cli_nostalgia_href)}" data-cli-nostalgia-b64="{_esc(data_cli_nostalgia_b64)}">
 {TALOS_CHATTER}
 {THEME_CONTROL}  <div class="wrap">
     <header class="site-header">
@@ -214,9 +260,11 @@ def article_html(
 
 def index_html(
     items: list[tuple[str, str, str]],
-    data_cli_hidden_href: str,
+    data_cli_hidden_links_json: str,
     data_cli_recovery_href: str,
     data_cli_recovery_b64: str,
+    data_cli_nostalgia_href: str,
+    data_cli_nostalgia_b64: str,
 ) -> str:
     lis = []
     for slug, title, _path in items:
@@ -236,7 +284,7 @@ def index_html(
 {FONT_LINK}
   <link rel="stylesheet" href="assets/style.css">
 </head>
-<body data-cli-hidden-href="{_esc(data_cli_hidden_href)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}">
+<body data-cli-hidden-links="{_esc(data_cli_hidden_links_json)}" data-cli-recovery-href="{_esc(data_cli_recovery_href)}" data-cli-recovery-b64="{_esc(data_cli_recovery_b64)}" data-cli-nostalgia-href="{_esc(data_cli_nostalgia_href)}" data-cli-nostalgia-b64="{_esc(data_cli_nostalgia_b64)}">
 {TALOS_CHATTER}
 {THEME_CONTROL}  <div class="wrap">
     <header class="site-header">
@@ -284,6 +332,10 @@ def main() -> int:
     shutil.copy2(CLI_JS_SRC, CLI_JS_DST)
 
     (ASSETS / RECOVERY_ASSET_FILENAME).write_text(RECOVERY_PLAINTEXT, encoding="utf-8")
+    (ASSETS / NOSTALGIA_ASSET_FILENAME).write_text(NOSTALGIA_PLAINTEXT, encoding="utf-8")
+
+    hidden_links_index = cli_hidden_links_json(from_article_dir=False)
+    hidden_links_article = cli_hidden_links_json(from_article_dir=True)
 
     md_files = sorted(ROOT.glob("*.md"))
     if not md_files:
@@ -299,28 +351,33 @@ def main() -> int:
         body = inject_prose_artifacts(MD.convert(text))
         out = ARTICLES_DIR / f"{slug}.html"
         recovery_href_article = f"../assets/{RECOVERY_ASSET_FILENAME}"
+        nostalgia_href_article = f"../assets/{NOSTALGIA_ASSET_FILENAME}"
         out.write_text(
             article_html(
                 title,
                 body,
                 "../",
-                "03-verite-v-boga.html",
+                hidden_links_article,
                 recovery_href_article,
                 RECOVERY_PLAINTEXT_B64,
+                nostalgia_href_article,
+                NOSTALGIA_PLAINTEXT_B64,
             ),
             encoding="utf-8",
         )
         if slug not in HIDDEN_FROM_INDEX_SLUGS:
             items.append((slug, title, str(path)))
 
-    index_cli_href = "articles/03-verite-v-boga.html"
     recovery_href_index = f"assets/{RECOVERY_ASSET_FILENAME}"
+    nostalgia_href_index = f"assets/{NOSTALGIA_ASSET_FILENAME}"
     (SITE / "index.html").write_text(
         index_html(
             items,
-            index_cli_href,
+            hidden_links_index,
             recovery_href_index,
             RECOVERY_PLAINTEXT_B64,
+            nostalgia_href_index,
+            NOSTALGIA_PLAINTEXT_B64,
         ),
         encoding="utf-8",
     )

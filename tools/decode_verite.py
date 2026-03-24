@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Восстанавливает plaintext из обфусцированного 03-verite-v-boga.md (stdin или файл)."""
+"""Восстанавливает plaintext из обфусцированного .md с ⧚…⧛ (03, 06 и т.д.; stdin или путь к файлу)."""
 
 from __future__ import annotations
 

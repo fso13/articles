@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""Генерирует 03-verite-v-boga.md: заголовок как есть, текст — base64 в CUSTOM64 + редкие читаемые фрагменты."""
+"""Генерирует обфусцированные .md из ignore/: заголовок как есть, текст — CUSTOM64 + XOR + сдвиг."""
 
 from __future__ import annotations
 
 import base64
 import random
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "ignore" / "03-verite-v-boga.md"
-DST = ROOT / "03-verite-v-boga.md"
+# (исходник в ignore/, результат в корне проекта)
+OBFUSCATE_JOBS: tuple[tuple[Path, Path], ...] = (
+    (ROOT / "ignore" / "03-verite-v-boga.md", ROOT / "03-verite-v-boga.md"),
+    (ROOT / "ignore" / "06-pokroviteli-ekrana.md", ROOT / "06-pokroviteli-ekrana.md"),
+)
 
 # Ровно 64 уникальных символа ↔ стандартный base64
 CUSTOM64 = (
@@ -91,11 +95,11 @@ def obfuscate_paragraph(para: str, pid: int, blob_counter: list[int]) -> str:
     return " ".join(parts)
 
 
-def main() -> None:
-    raw = SRC.read_text(encoding="utf-8")
+def obfuscate_file(src: Path, dst: Path) -> None:
+    raw = src.read_text(encoding="utf-8")
     lines = raw.splitlines()
     if not lines or not lines[0].startswith("#"):
-        raise SystemExit("Ожидается заголовок # в первой строке")
+        raise SystemExit(f"{src.name}: ожидается заголовок # в первой строке")
     title = lines[0]
     body = "\n".join(lines[1:]).strip()
     paras = re.split(r"\n\s*\n", body)
@@ -109,16 +113,24 @@ def main() -> None:
     note = (
         "\n\n<!-- Декодирование ⧚…⧛: idx=0,1,2… по файлу. "
         "1) сдвиг r=(idx*11+len*3)%len → s=s[(len-r):]+s[:(len-r)] при len>1. "
-        "2) кастомный алфавит → base64 (cat ._____fffd.qbf в CLI после 13 кликов по теме); ⌯→=. "
+        "2) кастомный алфавит → base64 (cat ._____fffd.qbf в CLI после 13 кликов по теме; статьи — cat ._____verite._node / ._____screen._out); ⌯→=. "
         "3) base64→bytes. 4) XOR b[i]^((idx*131+i*17+(idx*i)%251)&255). 5) UTF-8. "
         f'STD64="{STANDARD64}" CUSTOM64="{CUSTOM64}" -->\n'
     )
 
-    DST.write_text(
+    dst.write_text(
         title + "\n\n" + "\n\n".join(out_paras) + note,
         encoding="utf-8",
     )
-    print(f"Записано: {DST}")
+    print(f"Записано: {dst}")
+
+
+def main() -> None:
+    for src, dst in OBFUSCATE_JOBS:
+        if not src.is_file():
+            print(f"Пропуск (нет файла): {src}", file=sys.stderr)
+            continue
+        obfuscate_file(src, dst)
 
 
 if __name__ == "__main__":

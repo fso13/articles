@@ -3,8 +3,10 @@
   var SK = "talosThemeClicks";
   var shown = false;
 
-  /** Имя «точки входа» в домашней папке; текст из data-cli-recovery-b64, иначе fetch по data-cli-recovery-href */
+  /** Подсказки к ⧚…⧛: data-cli-recovery-b64 / fetch */
   var RECOVERY_VNODE = "._____fffd.qbf";
+  /** Диалог fso13/Jenny (общага, экраны): data-cli-nostalgia-b64 / fetch */
+  var NOSTALGIA_VNODE = ".___bench~stk.log";
 
   var FILES = {
     "/home/guest/readme.txt":
@@ -21,23 +23,61 @@
   var DIRS = {
     "/": ["home", "etc", "var", ".", ".."],
     "/home": ["guest", ".", ".."],
-    "/home/guest": ["readme.txt", "docs", RECOVERY_VNODE, ".", ".."],
+    "/home/guest": ["readme.txt", "docs", RECOVERY_VNODE, NOSTALGIA_VNODE, ".", ".."],
     "/home/guest/docs": ["note.txt", ".", ".."],
     "/etc": ["hosts", "passwd", ".", ".."],
     "/var": ["log", ".", ".."],
     "/var/log": ["app.log", ".", ".."],
   };
 
-  function hrefHidden() {
-    return document.body.getAttribute("data-cli-hidden-href") || "";
+  function hiddenLinkRows() {
+    var raw = document.body.getAttribute("data-cli-hidden-links");
+    if (raw) {
+      try {
+        var arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return arr;
+      } catch (e) {}
+    }
+    var h = document.body.getAttribute("data-cli-hidden-href");
+    if (h)
+      return [
+        {
+          href: h,
+          label: "«Вы верите в Бога?»",
+          catFile: "._____verite._node",
+        },
+      ];
+    return [];
+  }
+
+  /** Полный путь /home/guest/<catFile> → запись со ссылкой на статью */
+  function findArticleEntry(resolved) {
+    var rows = hiddenLinkRows();
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i].catFile) continue;
+      if (resolved === "/home/guest/" + rows[i].catFile) return rows[i];
+    }
+    return null;
+  }
+
+  /** Содержимое каталога (в ~ подмешиваются vnode скрытых статей из разметки) */
+  function dirEntries(path) {
+    var base = DIRS[path];
+    if (!base) return null;
+    if (path !== "/home/guest") return base;
+    var out = base.slice();
+    var rows = hiddenLinkRows();
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].catFile) out.push(rows[i].catFile);
+    }
+    return out;
   }
 
   function hrefRecovery() {
     return document.body.getAttribute("data-cli-recovery-href") || "";
   }
 
-  function recoveryTextInline() {
-    var b64 = document.body.getAttribute("data-cli-recovery-b64");
+  function decodeB64Utf8(b64) {
     if (!b64) return null;
     try {
       var bin = atob(b64);
@@ -47,6 +87,18 @@
     } catch (e) {
       return null;
     }
+  }
+
+  function recoveryTextInline() {
+    return decodeB64Utf8(document.body.getAttribute("data-cli-recovery-b64"));
+  }
+
+  function nostalgiaTextInline() {
+    return decodeB64Utf8(document.body.getAttribute("data-cli-nostalgia-b64"));
+  }
+
+  function hrefNostalgia() {
+    return document.body.getAttribute("data-cli-nostalgia-href") || "";
   }
 
   function isDir(p) {
@@ -119,21 +171,10 @@
     return r || cwd;
   }
 
-  function isLsHidden(cmd) {
-    var s = cmd.trim().replace(/\s+/g, " ");
-    if (!/^ls/i.test(s)) return false;
-    if (/^ls$/i.test(s)) return false;
-    return (
-      /(?:^|\s)-a(?:\s|$)/.test(s) ||
-      s.indexOf("-la") !== -1 ||
-      s.indexOf("-al") !== -1 ||
-      s.indexOf("-lah") !== -1 ||
-      s.indexOf("-hal") !== -1
-    );
-  }
-
   function fileSize(path) {
     if (path === "/home/guest/" + RECOVERY_VNODE) return 4096;
+    if (path === "/home/guest/" + NOSTALGIA_VNODE) return 3072;
+    if (findArticleEntry(path)) return 512;
     var c = FILES[path];
     if (c) return c.length;
     return 0;
@@ -142,8 +183,12 @@
   function longListing(name, fullPath, flags) {
     var sz = fileSize(fullPath);
     var szStr = flags.h && sz >= 1024 ? Math.round(sz / 1024) + "K" : String(sz);
-    var mark = name === RECOVERY_VNODE ? "-" : "-rw-r--r--";
-    var owner = name === RECOVERY_VNODE ? "root" : "guest";
+    var secret =
+      name === RECOVERY_VNODE ||
+      name === NOSTALGIA_VNODE ||
+      !!findArticleEntry(fullPath);
+    var mark = secret ? "-" : "-rw-r--r--";
+    var owner = secret ? "root" : "guest";
     return mark + "  1 " + owner + "  staff  " + szStr + "  Jan 15 10:00  " + name;
   }
 
@@ -154,7 +199,9 @@
       println("ls: cannot access '" + (args[args.length - 1] || ".") + "': No such file or directory");
       return;
     }
-    var names = DIRS[dir].filter(function (n) {
+    var entries = dirEntries(dir);
+    if (!entries) return;
+    var names = entries.filter(function (n) {
       if (n === "." || n === "..") return flags.a;
       if (n[0] === ".") return flags.a;
       return true;
@@ -191,7 +238,9 @@
     println(start);
     function walk(path, prefix, depth) {
       if (depth > maxD) return;
-      var names = DIRS[path].filter(function (n) {
+      var ent = dirEntries(path);
+      if (!ent) return;
+      var names = ent.filter(function (n) {
         return n !== "." && n !== "..";
       });
       names.sort();
@@ -209,23 +258,26 @@
     walk(start, "", 1);
   }
 
-  function isRecoveryFile(resolved) {
-    return resolved === "/home/guest/" + RECOVERY_VNODE;
+  function virtualFileKind(resolved) {
+    if (resolved === "/home/guest/" + RECOVERY_VNODE) return "recovery";
+    if (resolved === "/home/guest/" + NOSTALGIA_VNODE) return "nostalgia";
+    return null;
   }
 
   function readFile(resolved, cb) {
-    if (isRecoveryFile(resolved)) {
-      var inline = recoveryTextInline();
-      if (inline != null && inline !== "") {
-        cb(null, inline);
+    var vkind = virtualFileKind(resolved);
+    if (vkind === "recovery") {
+      var rtxt = recoveryTextInline();
+      if (rtxt != null && rtxt !== "") {
+        cb(null, rtxt);
         return;
       }
-      var url = hrefRecovery();
-      if (!url) {
+      var rurl = hrefRecovery();
+      if (!rurl) {
         cb("cat: " + RECOVERY_VNODE + ": нет data-cli-recovery-b64 и recovery href");
         return;
       }
-      fetch(url)
+      fetch(rurl)
         .then(function (r) {
           if (!r.ok) throw new Error(r.statusText);
           return r.text();
@@ -235,6 +287,30 @@
         })
         .catch(function (e) {
           cb("cat: " + RECOVERY_VNODE + ": " + (e.message || "fetch failed"));
+        });
+      return;
+    }
+    if (vkind === "nostalgia") {
+      var ntxt = nostalgiaTextInline();
+      if (ntxt != null && ntxt !== "") {
+        cb(null, ntxt);
+        return;
+      }
+      var nurl = hrefNostalgia();
+      if (!nurl) {
+        cb("cat: " + NOSTALGIA_VNODE + ": нет data-cli-nostalgia-b64 и href");
+        return;
+      }
+      fetch(nurl)
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.statusText);
+          return r.text();
+        })
+        .then(function (t) {
+          cb(null, t);
+        })
+        .catch(function (e) {
+          cb("cat: " + NOSTALGIA_VNODE + ": " + (e.message || "fetch failed"));
         });
       return;
     }
@@ -328,7 +404,6 @@
     "  help",
     "      этот список.",
     "",
-    "Подсказка: ls -la в домашней папке, затем cat " + RECOVERY_VNODE,
   ].join("\n");
 
   function openShell() {
@@ -417,22 +492,6 @@
 
       if (cmd0 === "ls") {
         runLs(cwd, args, println);
-        if (isLsHidden(line)) {
-          var h = hrefHidden();
-          if (h) {
-            println("-rw-r--r--  1 guest  staff  …  " + h);
-            var row = document.createElement("div");
-            row.className = "talos-cli-line-out talos-cli-line-out--link";
-            var a = document.createElement("a");
-            a.href = h;
-            a.className = "talos-cli-link";
-            a.textContent = "→ «Вы верите в Бога?»";
-            row.appendChild(a);
-            out.appendChild(row);
-          } else {
-            println("(data-cli-hidden-href не задан)");
-          }
-        }
         return;
       }
 
@@ -449,6 +508,12 @@
         var pathCat = resolvePath(cwd, args[1]);
         if (!pathCat) {
           println("cat: invalid path");
+          return;
+        }
+        var art = findArticleEntry(pathCat);
+        if (art && art.href) {
+          println("→ открываю " + (art.label || art.href));
+          window.location.assign(art.href);
           return;
         }
         readFile(pathCat, function (err, text) {
